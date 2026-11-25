@@ -20,7 +20,34 @@ Differences between the two:
 
 Podman can also replace Docker transparently: `alias docker=podman`, or install the `podman-docker` package.
 
-## Create the software image
+## Get the image
+
+### Option 1: download the published image
+
+The image is built, tested and published automatically (see [Automatic builds](#automatic-builds)):
+
+```bash
+$ENGINE pull ghcr.io/transmisiones-centauro/super_lio:latest
+```
+
+### Option 2: build it with the Dockerfile
+
+From the root of this repository:
+
+```bash
+$ENGINE build -f container/Dockerfile -t ghcr.io/transmisiones-centauro/super_lio:latest .
+```
+
+The [Dockerfile](Dockerfile) starts from `docker.io/osrf/ros:jazzy-desktop-full`, installs the dependencies, builds the Livox SDK, clones the Livox driver and the Livox/PointCloud2
+converter, copies this repository into `/ros2_ws/src/Super-LIO`, and builds everything in `/ros2_ws`.
+
+Check that the image works by running the functional test (see [Automatic builds](#automatic-builds)):
+
+```bash
+$ENGINE run --rm ghcr.io/transmisiones-centauro/super_lio:latest bash /test/run_test.sh
+```
+
+### Option 3: build it by hand
 
 Start a container from the official ROS 2 Jazzy image:
 
@@ -106,3 +133,21 @@ ros2 launch super_lio Livox_mid360.py
 ```
 
 Launch files for other sensors and datasets are in `src/super_lio/launch/`.
+
+## Automatic builds
+
+The workflow [`.github/workflows/container.yml`](../.github/workflows/container.yml) runs on every push to this
+repository, and can also be started by hand from the *Actions* tab. It:
+
+1. Builds the image with `container/Dockerfile`.
+2. Runs the functional test, [`container/test/run_test.sh`](test/run_test.sh). The test starts
+   the Super-LIO node with `config/hesai.yaml`, changed to read a Velodyne-style point cloud (`lidar_type: 3`), and [publishes synthetic data](test/synthetic_sensors.py) for 25 seconds: a static sensor in
+   a box-shaped room, with an IMU at 200 Hz and a point cloud at 10 Hz. It passes if at least 50 odometry messages
+   are published and the estimated position stays within 0.5 m of the origin.
+3. Publishes the image to `ghcr.io/transmisiones-centauro/super_lio`, only if the test passed, with these tags:
+   - the branch name (for example `ros2`), always pointing to the latest build of that branch;
+   - `sha-<commit>`, one per build;
+   - `latest`, only for builds of the default branch.
+
+For the workflow to publish, the `super_lio` package must give this repository write access: in the package
+settings, under *Manage Actions access*, add this repository with the *Write* role.
